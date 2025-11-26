@@ -24,7 +24,7 @@ import {
   Smile,
   TrendingUp
 } from 'lucide-react';
-import { projectId, publicAnonKey } from './utils/supabase/info';
+import { api } from './utils/api';
 
 export default function App() {
   const [phase, setPhase] = useState<'welcome' | 'gender' | 'main'>('welcome');
@@ -78,19 +78,8 @@ export default function App() {
 
   const loadStreak = async () => {
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-236712f8/streak/${userId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setStreak(data.streak?.current || 0);
-      }
+      const data = await api.getStreak(userId);
+      setStreak(data.streak?.current || 0);
     } catch (error) {
       console.error('Error loading streak:', error);
     }
@@ -98,23 +87,12 @@ export default function App() {
 
   const checkTodayCheckIn = async () => {
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-236712f8/checkins/${userId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-        }
-      );
+      const data = await api.getCheckins(userId);
+      const today = new Date().toISOString().split('T')[0];
+      const todayCheckIn = data.checkins?.find((c: any) => c.date === today);
 
-      if (response.ok) {
-        const data = await response.json();
-        const today = new Date().toISOString().split('T')[0];
-        const todayCheckIn = data.checkins?.find((c: any) => c.date === today);
-
-        if (todayCheckIn) {
-          setTodayMood(todayCheckIn.emoji || '');
-        }
+      if (todayCheckIn) {
+        setTodayMood(todayCheckIn.emoji || '');
       }
     } catch (error) {
       console.error('Error checking today check-in:', error);
@@ -126,25 +104,9 @@ export default function App() {
 
     if (isLogin) {
       // Login
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-236712f8/login`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-          body: JSON.stringify({ name, password }),
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Login failed');
-      }
-
+      const result = await api.login(name, password || '');
       const { profile } = result;
+
       setUserId(profile.userId);
       setUserName(profile.name);
       setUserGender(profile.gender as 'male' | 'female');
@@ -156,24 +118,7 @@ export default function App() {
     } else {
       // Signup
       const newUserId = `user_${Date.now()}`;
-
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-236712f8/profile`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-          body: JSON.stringify({ userId: newUserId, gender, name, password }),
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Signup failed');
-      }
+      await api.signup(newUserId, name, password || '', gender || 'not-specified');
 
       setUserId(newUserId);
       setUserName(name);
@@ -190,18 +135,7 @@ export default function App() {
 
   const handleCheckInComplete = async (data: { mood: string; emoji: string; answers: Record<string, string> }) => {
     try {
-      await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-236712f8/checkin`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-          body: JSON.stringify({ userId, ...data }),
-        }
-      );
-
+      await api.saveCheckin(userId, data);
       setTodayMood(data.emoji);
       await loadStreak();
       setShowCheckIn(false);
